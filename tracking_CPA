@@ -1,0 +1,67 @@
+// Модель перехода
+public class Click
+{
+    public int Id { get; set; }
+    public string AffiliateId { get; set; }
+    public string OfferId { get; set; }
+    public DateTime ClickTime { get; set; }
+    public string ClickId { get; set; }
+    public string IpAddress { get; set; }
+    public bool IsConverted { get; set; }
+}
+
+// Контекст базы данных
+public class CpaContext : DbContext
+{
+    public DbSet<Click> Clicks { get; set; }
+    public CpaContext(DbContextOptions<CpaContext> options) : base(options) { }
+}
+
+// Контроллер для трекинга
+[ApiController]
+[Route("api/[controller]")]
+public class TrackingController : ControllerBase
+{
+    private readonly CpaContext _context;
+
+    public TrackingController(CpaContext context)
+    {
+        _context = context;
+    }
+
+    // Фиксация клика
+    [HttpGet("click")]
+    public async Task<IActionResult> TrackClick([FromQuery] string affiliateId, [FromQuery] string offerId)
+    {
+        var click = new Click
+        {
+            AffiliateId = affiliateId,
+            OfferId = offerId,
+            ClickTime = DateTime.UtcNow,
+            ClickId = Guid.NewGuid().ToString(),
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            IsConverted = false
+        };
+
+        _context.Clicks.Add(click);
+        await _context.SaveChangesAsync();
+
+        // Обычно перенаправляем пользователя на целевую страницу оффера
+        return Redirect("https://product.mts.ru/landing?clickId=" + click.ClickId);
+    }
+
+    // Фиксация конверсии (например, по postback от продукта)
+    [HttpPost("conversion")]
+    public async Task<IActionResult> TrackConversion([FromBody] string clickId)
+    {
+        var click = await _context.Clicks.FirstOrDefaultAsync(c => c.ClickId == clickId);
+
+        if (click == null)
+            return NotFound();
+
+        click.IsConverted = true;
+        await _context.SaveChangesAsync();
+
+        return Ok();
+    }
+}
