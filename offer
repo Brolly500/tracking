@@ -1,0 +1,92 @@
+// Модель оффера
+public class Offer
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public string Description { get; set; }
+    public decimal Reward { get; set; } // Вознаграждение за конверсию
+    public bool IsActive { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+}
+
+// Контекст базы данных
+public class CpaContext : DbContext
+{
+    public DbSet<Offer> Offers { get; set; }
+    // другие DbSet ...
+    public CpaContext(DbContextOptions<CpaContext> options) : base(options) { }
+}
+
+// Контроллер для управления офферами
+[ApiController]
+[Route("api/[controller]")]
+public class OffersController : ControllerBase
+{
+    private readonly CpaContext _context;
+    public OffersController(CpaContext context)
+    {
+        _context = context;
+    }
+
+    // Получить список офферов
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<Offer>>> GetOffers()
+    {
+        return await _context.Offers.ToListAsync();
+    }
+
+    // Получить конкретный оффер по ID
+    [HttpGet("{id}")]
+    public async Task<ActionResult<Offer>> GetOffer(int id)
+    {
+        var offer = await _context.Offers.FindAsync(id);
+        if (offer == null)
+            return NotFound();
+        return offer;
+    }
+
+    // Создать новый оффер
+    [HttpPost]
+    public async Task<ActionResult<Offer>> CreateOffer([FromBody] Offer offer)
+    {
+        _context.Offers.Add(offer);
+        await _context.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetOffer), new { id = offer.Id }, offer);
+    }
+
+    // Редактировать оффер
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateOffer(int id, [FromBody] Offer updatedOffer)
+    {
+        if (id != updatedOffer.Id)
+            return BadRequest();
+
+        _context.Entry(updatedOffer).State = EntityState.Modified;
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!_context.Offers.Any(e => e.Id == id))
+                return NotFound();
+            throw;
+        }
+        return NoContent();
+    }
+
+    // Деактивировать оффер
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteOffer(int id)
+    {
+        var offer = await _context.Offers.FindAsync(id);
+        if (offer == null)
+            return NotFound();
+
+        offer.IsActive = false; // Можно также полностью удалить, но лучше для истории просто деактивировать
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
+}
