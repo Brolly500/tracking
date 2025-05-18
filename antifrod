@@ -39,7 +39,7 @@ public class AntiFraudService
         _context = context;
     }
 
-    // Пример простейшей антифрод-проверки
+    // Антифрод-проверки
     public async Task<bool> CheckClickForFraudAsync(Click click)
     {
         // Проверка 1: Слишком много кликов с одного IP за короткое время (спам)
