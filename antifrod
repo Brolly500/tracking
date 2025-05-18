@@ -1,0 +1,82 @@
+// Пример модели лога подозрительных событий
+public class FraudLog
+{
+    public int Id { get; set; }
+    public int ClickId { get; set; }
+    public string Reason { get; set; }
+    public DateTime DetectedAt { get; set; }
+}
+
+// Расширяем модель Click новыми полями для антифрода
+public class Click
+{
+    public int Id { get; set; }
+    public string AffiliateId { get; set; }
+    public string OfferId { get; set; }
+    public DateTime ClickTime { get; set; }
+    public string ClickId { get; set; }
+    public string IpAddress { get; set; }
+    public string UserAgent { get; set; } // добавляем user-agent
+    public bool IsConverted { get; set; }
+    public bool IsFraud { get; set; } // отметка о подозрительности
+}
+
+// Контекст базы данных
+public class CpaContext : DbContext
+{
+    public DbSet<Click> Clicks { get; set; }
+    public DbSet<FraudLog> FraudLogs { get; set; }
+    public CpaContext(DbContextOptions<CpaContext> options) : base(options) { }
+}
+
+// Антифрод-сервис
+public class AntiFraudService
+{
+    private readonly CpaContext _context;
+
+    public AntiFraudService(CpaContext context)
+    {
+        _context = context;
+    }
+
+    // Пример простейшей антифрод-проверки
+    public async Task<bool> CheckClickForFraudAsync(Click click)
+    {
+        // Проверка 1: Слишком много кликов с одного IP за короткое время (спам)
+        var clicksFromSameIp = await _context.Clicks
+            .Where(c => c.IpAddress == click.IpAddress &&
+                        c.ClickTime > DateTime.UtcNow.AddMinutes(-5))
+            .CountAsync();
+
+        if (clicksFromSameIp > 10)
+        {
+            await LogFraud(click, "Слишком много кликов с одного IP за 5 минут");
+            click.IsFraud = true;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        // Проверка 2: Подозрительный user-agent (боты)
+        if (string.IsNullOrEmpty(click.UserAgent) || click.UserAgent.ToLower().Contains("bot"))
+        {
+            await LogFraud(click, "Подозрительный user-agent");
+            click.IsFraud = true;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task LogFraud(Click click, string reason)
+    {
+        var fraudLog = new FraudLog
+        {
+            ClickId = click.Id,
+            Reason = reason,
+            DetectedAt = DateTime.UtcNow
+        };
+        _context.FraudLogs.Add(fraudLog);
+        await _context.SaveChangesAsync();
+    }
+}
